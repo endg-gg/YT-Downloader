@@ -9,10 +9,10 @@ def main():
         options = prompts()
         
         if options['mode'] == 'single':
-            downloader(None, options['sources'], options['type'], options['save_path'])
+            downloader(None, options['sources'], options['type'], options['save_path'], options['resolution'])
         elif options['mode'] == 'bulk':
             for index, source in enumerate(options['sources'], 1):
-                downloader(index, source, options['type'], options['save_path'])
+                downloader(index, source, options['type'], options['save_path'], options['resolution'])
 
         logger('info', 'Done...')
     except KeyboardInterrupt:

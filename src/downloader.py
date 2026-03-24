@@ -1,6 +1,7 @@
 import yt_dlp
 import re
 import imageio_ffmpeg as ffmpeg
+from rich.progress import Progress, BarColumn, DownloadColumn, TransferSpeedColumn, TimeRemainingColumn
 from logger import logger, spinner
 
 class custom_logger():
@@ -55,24 +56,48 @@ def get_metadata(index, link):
     finally:
         get_metadata_spinner.stop()
 
-def downloader(index, link, type, save_path):
-    downloading_spinner = spinner('info', f"Downloading {type}{'...' if index is None else f' {index} ...'}")
+def downloader(index, link, type, save_path, resolution='720'):
+    label = f"{type}{'' if index is None else f' {index}'}"
+    download_count = [0]
 
-    try:
+    with Progress(
+        '[info]{task.description}',
+        BarColumn(),
+        '[progress.percentage]{task.percentage:>3.0f}%',
+        DownloadColumn(),
+        TransferSpeedColumn(),
+        TimeRemainingColumn(),
+        transient=True
+    ) as progress:
+        task = progress.add_task(f'Downloading {label}...', total=None)
+
+        def progress_hook(d):
+            if d['status'] == 'downloading':
+                total = d.get('total_bytes') or d.get('total_bytes_estimate')
+                downloaded = d.get('downloaded_bytes', 0)
+                if total:
+                    progress.update(task, total=total, completed=downloaded)
+            elif d['status'] == 'finished':
+                download_count[0] += 1
+                if type == 'video' and download_count[0] == 1:
+                    progress.update(task, description=f'Downloading audio (merging)...', total=None, completed=0)
+
+        fmt_video = (
+            f'bestvideo[height<={resolution}]+bestaudio/best[height<={resolution}]/best'
+            if resolution != 'best'
+            else 'bestvideo+bestaudio/best'
+        )
+
         ydl_opts_video = {
             'quiet': True,
             'no_warnings': True,
             'logger': custom_logger(),
-            'format': 'bestvideo+bestaudio/best',
+            'format': fmt_video,
             'ffmpeg_location': ffmpeg_path,
             'merge_output_format': 'mp4',
             'outtmpl': f'{save_path}/%(title)s.%(ext)s',
-            'postprocessors': [
-                {
-                    'key': 'FFmpegVideoConvertor',
-                    'preferedformat': 'mp4'
-                }
-            ]
+            'progress_hooks': [progress_hook],
+            'postprocessors': [{'key': 'FFmpegVideoConvertor', 'preferedformat': 'mp4'}]
         }
 
         ydl_opts_audio = {
@@ -81,30 +106,19 @@ def downloader(index, link, type, save_path):
             'logger': custom_logger(),
             'format': 'bestaudio/best',
             'ffmpeg_location': ffmpeg_path,
+            'outtmpl': f'{save_path}/%(title)s.%(ext)s',
+            'progress_hooks': [progress_hook],
             'postprocessors': [
-                {
-                    'key': 'FFmpegExtractAudio',
-                    'preferredcodec': 'mp3',
-                    'preferredquality': '192'
-                },
-                {
-                    'key': 'FFmpegMetadata',
-                    'add_metadata': True
-                }
-            ],
-            'outtmpl': f'{save_path}/%(title)s.%(ext)s'
+                {'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': '192'},
+                {'key': 'FFmpegMetadata', 'add_metadata': True}
+            ]
         }
 
-        with yt_dlp.YoutubeDL(ydl_opts_video if type == 'video' else ydl_opts_audio) as ydl:
-            ydl.download([link])
-
-        logger('success', f"✓ {type.capitalize()}{'' if index is None else f' {index}'} downloaded successfully")
-        return True
-
-    except Exception:
-        logger('error', f"✗ Failed to download {type}{'' if index is None else f' {index}'}")
-        return False
-    
-    finally:
-        downloading_spinner.stop()
-    
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts_video if type == 'video' else ydl_opts_audio) as ydl:
+                ydl.download([link])
+            logger('success', f"✓ {label.capitalize()} downloaded successfully")
+            return True
+        except Exception:
+            logger('error', f"✗ Failed to download {label}")
+            return False

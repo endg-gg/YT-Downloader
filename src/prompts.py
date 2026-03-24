@@ -53,6 +53,17 @@ def prompt_download_type():
             return user_input
         logger('error', 'Bad option, please choose again.')
 
+def prompt_resolution():
+    logger('primary', 'Resolution:\n1. 360p\n2. 720p (default)\n3. 1080p\n4. Best')
+    resolutions = {'1': '360', '2': '720', '3': '1080', '4': 'best'}
+    while True:
+        user_input = input('Choose resolution (1-4, Enter for default): ').strip()
+        if user_input == '':
+            return '720'
+        if user_input in resolutions:
+            return resolutions[user_input]
+        logger('error', 'Bad option, please choose again.')
+
 def prompt_save_path():
     while True:
         user_input = input('Save path. Empty to use default (~/Downloads): ').strip()
@@ -71,6 +82,8 @@ def prompts():
     user_prompt_download_type = prompt_download_type()
     type = 'video' if user_prompt_download_type == '1' else 'audio'
 
+    resolution = prompt_resolution() if type == 'video' else None
+
     user_prompt_save_path = prompt_save_path()
     save_path = '~/Downloads' if not user_prompt_save_path else user_prompt_save_path
 
@@ -78,5 +91,6 @@ def prompts():
         'mode': mode,
         'sources': user_prompt_source,
         'type': type,
+        'resolution': resolution,
         'save_path': save_path
     }
