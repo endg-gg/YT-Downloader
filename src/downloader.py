@@ -79,6 +79,8 @@ def downloader(index, link, type, save_path, resolution='720'):
     ) as progress:
         task = progress.add_task(f'Downloading {label}...', total=None)
 
+        processing_spinner = [None]
+
         def progress_hook(d):
             if d['status'] == 'downloading':
                 total = d.get('total_bytes') or d.get('total_bytes_estimate')
@@ -89,6 +91,14 @@ def downloader(index, link, type, save_path, resolution='720'):
                 download_count[0] += 1
                 if type == 'video' and download_count[0] == 1:
                     progress.update(task, description=f'Downloading audio (merging)...', total=None, completed=0)
+                elif type == 'audio':
+                    progress.stop()
+                    processing_spinner[0] = spinner('info', 'Processing audio...')
+
+        def postprocessor_hook(d):
+            if d['status'] == 'finished' and processing_spinner[0]:
+                processing_spinner[0].stop()
+                processing_spinner[0] = None
 
         fmt_video = (
             f'bestvideo[vcodec^=avc][{dim_filter}<={resolution}]+bestaudio[acodec^=mp4a]/bestvideo[vcodec^=avc][{dim_filter}<={resolution}]+bestaudio/bestvideo[{dim_filter}<={resolution}]+bestaudio[acodec^=mp4a]/bestvideo[{dim_filter}<={resolution}]+bestaudio'
@@ -119,6 +129,7 @@ def downloader(index, link, type, save_path, resolution='720'):
             'ffmpeg_location': ffmpeg_path,
             'outtmpl': f'{save_path}/%(title)s.%(ext)s',
             'progress_hooks': [progress_hook],
+            'postprocessor_hooks': [postprocessor_hook],
             'postprocessors': [
                 {'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': '192'},
                 {'key': 'FFmpegMetadata', 'add_metadata': True}
